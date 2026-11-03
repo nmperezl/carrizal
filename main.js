@@ -12,8 +12,10 @@ const map = new maplibregl.Map({
         },
         'layers': [{ 'id': 'satelite', 'type': 'raster', 'source': 'satelite' }]
     },
-    center: [-68.4, -33.0], // Coordenadas de El Carrizal
-    zoom: 14
+    center: [-68.747037, -33.326260], // <-- ¡CAMBIA ESTO! Pon tu Longitud y Latitud reales-33.326260, -68.747037
+
+
+    zoom: 14 // <-- Ajusta el zoom (13 o 15) según qué tan grande sea tu área
 });
 
 // 2. Configurar los años y colores
