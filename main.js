@@ -1,4 +1,4 @@
-// 1. Inicializar el mapa con fondo satelital (usando Esri como base gratuita)
+// 1. Inicializar el mapa en las coordenadas exactas de El Carrizal
 const map = new maplibregl.Map({
     container: 'map',
     style: {
@@ -10,32 +10,40 @@ const map = new maplibregl.Map({
                 'tileSize': 256
             }
         },
-        'layers': [{ 'id': 'satelite', 'type': 'raster', 'source': 'satelite' }]
+        'layers': [
+            {
+                'id': 'fondo-satelital',
+                'type': 'raster',
+                'source': 'satelite',
+                // TRUCO: Desaturamos el fondo para que resalten los colores de tus vectores
+                'paint': {
+                    'raster-saturation': -0.7, // -1 es blanco y negro, 0 es color original
+                    'raster-contrast': 0.1,    // Un poco de contraste para que no se vea lavado
+                    'raster-brightness-min': 0.1
+                }
+            }
+        ]
     },
-    center: [-68.747037, -33.326260], // <-- ¡CAMBIA ESTO! Pon tu Longitud y Latitud reales-33.326260, -68.747037
-
-
-    zoom: 14 // <-- Ajusta el zoom (13 o 15) según qué tan grande sea tu área
+    center: [-68.7598031, -33.3217114], // Coordenadas exactas de tu link de Google Maps
+    zoom: 14.5
 });
 
-// 2. Configurar los años y colores
+// 2. Configurar los años y colores (Ajustados para que se distingan bien)
 const años = [
-    { año: '2010', archivo: 'techos_2010.geojson', color: '#ff0000' }, // Rojo
-    { año: '2015', archivo: 'techos_2015.geojson', color: '#ffa500' }, // Naranja
-    { año: '2022', archivo: 'techos_2022.geojson', color: '#ffff00' }, // Amarillo
-    { año: '2024', archivo: 'techos_2024.geojson', color: '#00ff00' }  // Verde
+    { año: '2010', archivo: 'techos_2010.geojson', color: '#e63946' }, // Rojo
+    { año: '2015', archivo: 'techos_2015.geojson', color: '#f4a261' }, // Naranja
+    { año: '2022', archivo: 'techos_2022.geojson', color: '#e9c46a' }, // Amarillo
+    { año: '2024', archivo: 'techos_2024.geojson', color: '#2a9d8f' }  // Verde agua
 ];
 
 // 3. Cargar las capas al mapa
 map.on('load', () => {
     años.forEach((item, index) => {
-        // Cargar el archivo GeoJSON
         map.addSource(`fuente_${item.año}`, {
             type: 'geojson',
-            data: item.archivo // Asume que los archivos están en la misma carpeta que index.html
+            data: item.archivo
         });
 
-        // Añadir la capa de polígonos (oculta al inicio, excepto 2010)
         map.addLayer({
             id: `capa_${item.año}`,
             type: 'fill',
@@ -43,26 +51,58 @@ map.on('load', () => {
             layout: { visibility: index === 0 ? 'visible' : 'none' },
             paint: {
                 'fill-color': item.color,
-                'fill-opacity': 0.6,
-                'fill-outline-color': '#000000'
+                'fill-opacity': 0.75,
+                'fill-outline-color': '#ffffff' // Borde blanco para que se vea limpio
             }
         });
     });
 });
 
-// 4. Lógica de la barra cronológica (Timeline)
+// 4. Lógica de la barra cronológica
 const slider = document.getElementById('timeline');
 const labelAño = document.getElementById('año-actual');
+const contenedorPuntos = document.getElementById('puntos-tiempo');
 
-slider.addEventListener('input', (e) => {
-    const valor = parseInt(e.target.value);
+// Creamos los puntitos de la barra temporal dinámicamente
+años.forEach((item, index) => {
+    const punto = document.createElement('div');
+    punto.className = 'punto-tiempo';
+    punto.innerText = item.año;
     
-    // Lógica de acumulación: Mostrar el año seleccionado y todos los anteriores
+    // Al hacer clic en un año, movemos el slider
+    punto.addEventListener('click', () => {
+        slider.value = index;
+        actualizarMapa(index);
+    });
+    
+    contenedorPuntos.appendChild(punto);
+});
+
+// Función que actualiza el mapa y los estilos de los puntitos
+function actualizarMapa(valor) {
+    // Acumular capas (muestra la actual y todas las anteriores)
     años.forEach((item, index) => {
         const visibilidad = index <= valor ? 'visible' : 'none';
         map.setLayoutProperty(`capa_${item.año}`, 'visibility', visibilidad);
     });
 
-    // Actualizar el texto del año
+    // Actualizar texto del año
     labelAño.innerText = años[valor].año;
+
+    // Actualizar color de los puntos (resaltar el activo)
+    const puntos = document.querySelectorAll('.punto-tiempo');
+    puntos.forEach((punto, index) => {
+        if (index <= valor) {
+            punto.classList.add('activo');
+        } else {
+            punto.classList.remove('activo');
+        }
+    });
+}
+
+slider.addEventListener('input', (e) => {
+    actualizarMapa(parseInt(e.target.value));
 });
+
+// Inicializar la primera vez
+actualizarMapa(0);
