@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Crecimiento El Carrizal</title>
+    <script src='https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js'></script>
+    <link href='https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css' rel='stylesheet' />
+    <style>
+        body { margin: 0; padding: 0; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        #timeline-container {
+            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+            background: white; padding: 15px 30px; border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3); text-align: center;
+            font-family: sans-serif; z-index: 1000;
+        }
+        input[type=range] { width: 300px; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div id="timeline-container">
+        <h3 id="año-actual" style="margin: 0;">2010</h3>
+        <input type="range" id="timeline" min="0" max="3" step="1" value="0">
+    </div>
+
+    <script src="main.js"></script>
+</body>
+</html>
