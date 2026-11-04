@@ -21,8 +21,6 @@ const map = new maplibregl.Map({
 
 // 2. Definir capas
 const añosTexto = ['2010', '2015', '2022', '2024'];
-
-// Mismos colores para techos y expansión para que sea coherente
 const coloresPorAño = ['#e63946', '#f4a261', '#e9c46a', '#2a9d8f']; 
 
 const capasTechos = [
@@ -54,7 +52,7 @@ map.on('load', () => {
         });
     });
 
-    // --- Cargar Expansión (COLORES POR AÑO) ---
+    // --- Cargar Expansión (CON COLORES POR AÑO) ---
     capasExpansion.forEach((capa) => {
         map.addSource(capa.id, { type: 'geojson', data: capa.archivo });
         
@@ -64,22 +62,22 @@ map.on('load', () => {
             source: capa.id,
             layout: { visibility: 'none' },
             paint: {
-                // Acá está la magia: leemos el año del campo 'layer' y le asignamos el color
+                // Lee el campo 'layer', extrae el año y le asigna el color
                 'fill-color': [
                     'match',
-                    ['to-number', ['slice', ['get', 'layer'], 3]], // Extrae el año (ej: "2010") y lo hace número
+                    ['to-number', ['slice', ['get', 'layer'], 3]], 
                     2010, coloresPorAño[0],
                     2015, coloresPorAño[1],
                     2022, coloresPorAño[2],
                     2024, coloresPorAño[3],
-                    '#cccccc' // Color por defecto si no coincide ninguno
+                    '#cccccc' // Color gris por defecto
                 ],
-                'fill-opacity': 0.5, // Un poco más transparente que los techos para que se vean si se superponen
+                'fill-opacity': 0.5, 
                 'fill-outline-color': '#333'
             }
         });
 
-        // Popup para Expansión (Tabla de atributos)
+        // Popup para Expansión
         map.on('click', capa.id, (e) => {
             const p = e.features[0].properties;
             const getVal = (val) => val !== undefined && val !== null ? val : 'N/A';
@@ -128,7 +126,7 @@ function actualizarMapa() {
     labelAño.innerText = añosTexto[añoActual];
     document.querySelectorAll('.punto-tiempo').forEach((p, i) => p.classList.toggle('activo', i <= añoActual));
 
-    // --- Lógica Techos ---
+    // --- Lógica Techos (La barra de tiempo SÍ afecta a los techos) ---
     capasTechos.forEach(capa => {
         if (mostrarTechos && capa.año <= añoActual) {
             map.setLayoutProperty(capa.id, 'visibility', 'visible');
@@ -137,19 +135,11 @@ function actualizarMapa() {
         }
     });
 
-    // --- Lógica Expansión ---
+    // --- Lógica Expansión (La barra de tiempo NO los oculta, se ven todos) ---
     capasExpansion.forEach(capa => {
         if (mostrarExpansion) {
             map.setLayoutProperty(capa.id, 'visibility', 'visible');
-            
-            // Filtramos por año (si estamos en 2015, muestra 2010 y 2015)
-            const filtroAño = [
-                '<=',
-                ['to-number', ['slice', ['get', 'layer'], 3]], 
-                parseInt(añosTexto[añoActual])
-            ];
-            map.setFilter(capa.id, filtroAño);
-            
+            // Eliminamos el setFilter para que se vean TODOS los polígonos de A1 y A3 de una
         } else {
             map.setLayoutProperty(capa.id, 'visibility', 'none');
         }
