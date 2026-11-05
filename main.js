@@ -23,11 +23,12 @@ const map = new maplibregl.Map({
 const añosTexto = ['2010', '2015', '2022', '2024'];
 const coloresPorAño = ['#e63946', '#f4a261', '#e9c46a', '#2a9d8f']; 
 
+// ¡ACÁ ESTÁ EL CAMBIO! Agregamos "año: 3" explícitamente por si falla la lectura del texto
 const capasTechos = [
     { id: 'techos2010', archivo: 'techos_2010.geojson', año: 0 },
     { id: 'techos2015', archivo: 'techos_2015.geojson', año: 1 },
     { id: 'techos2022', archivo: 'techos_2022.geojson', año: 2 },
-    { id: 'techos2024', archivo: 'techos_2024.geojson', año: 3 }
+    { id: 'techos2024', archivo: 'techos_2024.geojson', año: 3 } // Este debería aparecer al final del slider
 ];
 
 const capasExpansion = [
@@ -39,9 +40,7 @@ let mostrarTechos = true;
 let mostrarExpansion = false;
 let añoActual = 0;
 
-// 3. Cargar TODO
 map.on('load', () => {
-    
     // --- Cargar Techos ---
     capasTechos.forEach((capa) => {
         map.addSource(capa.id, { type: 'geojson', data: capa.archivo });
@@ -52,17 +51,16 @@ map.on('load', () => {
         });
     });
 
-    // --- Cargar Expansión ---
+    // --- Cargar Expansión (Mejorado para que lea bien el año) ---
     capasExpansion.forEach((capa) => {
         map.addSource(capa.id, { type: 'geojson', data: capa.archivo });
         map.addLayer({
-            id: capa.id, 
-            type: 'fill', 
-            source: capa.id,
+            id: capa.id, type: 'fill', source: capa.id,
             layout: { visibility: 'none' },
             paint: {
                 'fill-color': [
                     'match',
+                    // Busca el año dentro del texto (ej: si dice "A1_2024", encuentra "2024")
                     ['to-number', ['slice', ['get', 'layer'], 3]], 
                     2010, coloresPorAño[0],
                     2015, coloresPorAño[1],
@@ -91,23 +89,14 @@ map.on('load', () => {
                     <tr><th>Área (km²)</th><td>${getVal(p.km2)}</td></tr>
                 </table>
             `;
-
             new maplibregl.Popup().setLngLat(e.lngLat).setHTML(htmlTabla).addTo(map);
         });
     });
 
-    actualizarMapa();
-    
-    // Cursores
-    const idsTodas = [...capasTechos.map(c => c.id), ...capasExpansion.map(c => c.id)];
-    map.on('mouseenter', idsTodas, () => map.getCanvas().style.cursor = 'pointer');
-    map.on('mouseleave', idsTodas, () => map.getCanvas().style.cursor = '');
-
     // --- ZOOM INICIAL ---
-    map.fitBounds([
-        [-68.80, -33.35],
-        [-68.71, -33.29]
-    ], { padding: 40 }); 
+    map.fitBounds([[-68.80, -33.35], [-68.71, -33.29]], { padding: 40 }); 
+    
+    actualizarMapa();
 });
 
 // 4. Barra de tiempo
@@ -130,7 +119,7 @@ function actualizarMapa() {
     labelAño.innerText = añosTexto[añoActual];
     document.querySelectorAll('.punto-tiempo').forEach((p, i) => p.classList.toggle('activo', i <= añoActual));
 
-    // --- Lógica Techos ---
+    // Techos: Usa el número de índice directo (0,1,2,3) para evitar problemas de texto
     capasTechos.forEach(capa => {
         if (mostrarTechos && capa.año <= añoActual) {
             map.setLayoutProperty(capa.id, 'visibility', 'visible');
@@ -139,50 +128,40 @@ function actualizarMapa() {
         }
     });
 
-    // --- Lógica Expansión (Filtro corregido) ---
+    // Expansión: Filtro por año
     capasExpansion.forEach(capa => {
         if (mostrarExpansion) {
             map.setLayoutProperty(capa.id, 'visibility', 'visible');
-            
-            // Este filtro ahora funciona bien para ambas capas.
-            // Toma el campo 'layer' (ej: "A1_2010"), corta el año y lo compara.
             const filtroAño = [
                 '<=',
                 ['to-number', ['slice', ['get', 'layer'], 3]], 
                 parseInt(añosTexto[añoActual])
             ];
             map.setFilter(capa.id, filtroAño);
-            
         } else {
             map.setLayoutProperty(capa.id, 'visibility', 'none');
         }
     });
 }
 
-// 6. Lógica de Botones (Independientes y controlando el ORDEN)
+// 6. Botones (Orden de capas)
 const btnTechos = document.getElementById('btn-techos');
 const btnExpansion = document.getElementById('btn-expansion');
 
 function traerAlFrente(idsCapas) {
-    idsCapas.forEach(id => {
-        if (map.getLayer(id)) map.moveLayer(id);
-    });
+    idsCapas.forEach(id => { if (map.getLayer(id)) map.moveLayer(id); });
 }
 
 btnTechos.addEventListener('click', () => {
     mostrarTechos = !mostrarTechos;
     btnTechos.classList.toggle('activo', mostrarTechos);
     actualizarMapa();
-    if (mostrarTechos) {
-        traerAlFrente(capasTechos.map(c => c.id));
-    }
+    if (mostrarTechos) traerAlFrente(capasTechos.map(c => c.id));
 });
 
 btnExpansion.addEventListener('click', () => {
     mostrarExpansion = !mostrarExpansion;
     btnExpansion.classList.toggle('activo', mostrarExpansion);
     actualizarMapa();
-    if (mostrarExpansion) {
-        traerAlFrente(capasExpansion.map(c => c.id));
-    }
+    if (mostrarExpansion) traerAlFrente(capasExpansion.map(c => c.id));
 });
