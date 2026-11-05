@@ -1,4 +1,4 @@
-// 1. Inicializar mapa (Sin zoom fijo, lo haremos al final)
+// 1. Inicializar mapa
 const map = new maplibregl.Map({
     container: 'map',
     style: {
@@ -15,8 +15,8 @@ const map = new maplibregl.Map({
             'paint': { 'raster-saturation': -0.7, 'raster-contrast': 0.1, 'raster-brightness-min': 0.1 }
         }]
     },
-    center: [-68.7598031, -33.3217114], // Centro por defecto
-    zoom: 12 // Zoom bajo por defecto, luego se ajusta
+    center: [-68.7598031, -33.3217114], 
+    zoom: 12
 });
 
 // 2. Definir capas
@@ -103,11 +103,10 @@ map.on('load', () => {
     map.on('mouseenter', idsTodas, () => map.getCanvas().style.cursor = 'pointer');
     map.on('mouseleave', idsTodas, () => map.getCanvas().style.cursor = '');
 
-    // --- ZOOM INICIAL A LA MANCHA URBANA ---
-    // Ajusta estas coordenadas si querés encuadrar exactamente tu área
+    // --- ZOOM INICIAL ---
     map.fitBounds([
-        [-68.80, -33.35], // Esquina Suroeste
-        [-68.71, -33.29]  // Esquina Noreste
+        [-68.80, -33.35],
+        [-68.71, -33.29]
     ], { padding: 40 }); 
 });
 
@@ -140,12 +139,13 @@ function actualizarMapa() {
         }
     });
 
-    // --- Lógica Expansión (Filtrada por año) ---
+    // --- Lógica Expansión (Filtro corregido) ---
     capasExpansion.forEach(capa => {
         if (mostrarExpansion) {
             map.setLayoutProperty(capa.id, 'visibility', 'visible');
             
-            // ACÁ ESTÁ EL FILTRO: Muestra los polígonos de este año y los anteriores
+            // Este filtro ahora funciona bien para ambas capas.
+            // Toma el campo 'layer' (ej: "A1_2010"), corta el año y lo compara.
             const filtroAño = [
                 '<=',
                 ['to-number', ['slice', ['get', 'layer'], 3]], 
@@ -163,7 +163,6 @@ function actualizarMapa() {
 const btnTechos = document.getElementById('btn-techos');
 const btnExpansion = document.getElementById('btn-expansion');
 
-// Función para traer capas al frente
 function traerAlFrente(idsCapas) {
     idsCapas.forEach(id => {
         if (map.getLayer(id)) map.moveLayer(id);
@@ -174,7 +173,6 @@ btnTechos.addEventListener('click', () => {
     mostrarTechos = !mostrarTechos;
     btnTechos.classList.toggle('activo', mostrarTechos);
     actualizarMapa();
-    // Si lo prendemos, lo pasamos al frente
     if (mostrarTechos) {
         traerAlFrente(capasTechos.map(c => c.id));
     }
@@ -184,7 +182,6 @@ btnExpansion.addEventListener('click', () => {
     mostrarExpansion = !mostrarExpansion;
     btnExpansion.classList.toggle('activo', mostrarExpansion);
     actualizarMapa();
-    // Si lo prendemos, lo pasamos al frente
     if (mostrarExpansion) {
         traerAlFrente(capasExpansion.map(c => c.id));
     }
