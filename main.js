@@ -1,4 +1,4 @@
-// 1. Inicializar mapa
+// 1. Inicializar mapa (Sin zoom fijo, lo haremos al final)
 const map = new maplibregl.Map({
     container: 'map',
     style: {
@@ -15,8 +15,8 @@ const map = new maplibregl.Map({
             'paint': { 'raster-saturation': -0.7, 'raster-contrast': 0.1, 'raster-brightness-min': 0.1 }
         }]
     },
-    center: [-68.7598031, -33.3217114], 
-    zoom: 14.5
+    center: [-68.7598031, -33.3217114], // Centro por defecto
+    zoom: 12 // Zoom bajo por defecto, luego se ajusta
 });
 
 // 2. Definir capas
@@ -52,17 +52,15 @@ map.on('load', () => {
         });
     });
 
-    // --- Cargar Expansión (CON COLORES POR AÑO) ---
+    // --- Cargar Expansión ---
     capasExpansion.forEach((capa) => {
         map.addSource(capa.id, { type: 'geojson', data: capa.archivo });
-        
         map.addLayer({
             id: capa.id, 
             type: 'fill', 
             source: capa.id,
             layout: { visibility: 'none' },
             paint: {
-                // Lee el campo 'layer', extrae el año y le asigna el color
                 'fill-color': [
                     'match',
                     ['to-number', ['slice', ['get', 'layer'], 3]], 
@@ -70,14 +68,14 @@ map.on('load', () => {
                     2015, coloresPorAño[1],
                     2022, coloresPorAño[2],
                     2024, coloresPorAño[3],
-                    '#cccccc' // Color gris por defecto
+                    '#cccccc'
                 ],
                 'fill-opacity': 0.5, 
                 'fill-outline-color': '#333'
             }
         });
 
-        // Popup para Expansión
+        // Popup
         map.on('click', capa.id, (e) => {
             const p = e.features[0].properties;
             const getVal = (val) => val !== undefined && val !== null ? val : 'N/A';
@@ -104,6 +102,13 @@ map.on('load', () => {
     const idsTodas = [...capasTechos.map(c => c.id), ...capasExpansion.map(c => c.id)];
     map.on('mouseenter', idsTodas, () => map.getCanvas().style.cursor = 'pointer');
     map.on('mouseleave', idsTodas, () => map.getCanvas().style.cursor = '');
+
+    // --- ZOOM INICIAL A LA MANCHA URBANA ---
+    // Ajusta estas coordenadas si querés encuadrar exactamente tu área
+    map.fitBounds([
+        [-68.80, -33.35], // Esquina Suroeste
+        [-68.71, -33.29]  // Esquina Noreste
+    ], { padding: 40 }); 
 });
 
 // 4. Barra de tiempo
@@ -126,7 +131,7 @@ function actualizarMapa() {
     labelAño.innerText = añosTexto[añoActual];
     document.querySelectorAll('.punto-tiempo').forEach((p, i) => p.classList.toggle('activo', i <= añoActual));
 
-    // --- Lógica Techos (La barra de tiempo SÍ afecta a los techos) ---
+    // --- Lógica Techos ---
     capasTechos.forEach(capa => {
         if (mostrarTechos && capa.año <= añoActual) {
             map.setLayoutProperty(capa.id, 'visibility', 'visible');
@@ -135,29 +140,52 @@ function actualizarMapa() {
         }
     });
 
-    // --- Lógica Expansión (La barra de tiempo NO los oculta, se ven todos) ---
+    // --- Lógica Expansión (Filtrada por año) ---
     capasExpansion.forEach(capa => {
         if (mostrarExpansion) {
             map.setLayoutProperty(capa.id, 'visibility', 'visible');
-            // Eliminamos el setFilter para que se vean TODOS los polígonos de A1 y A3 de una
+            
+            // ACÁ ESTÁ EL FILTRO: Muestra los polígonos de este año y los anteriores
+            const filtroAño = [
+                '<=',
+                ['to-number', ['slice', ['get', 'layer'], 3]], 
+                parseInt(añosTexto[añoActual])
+            ];
+            map.setFilter(capa.id, filtroAño);
+            
         } else {
             map.setLayoutProperty(capa.id, 'visibility', 'none');
         }
     });
 }
 
-// 6. Lógica de Botones (Independientes)
+// 6. Lógica de Botones (Independientes y controlando el ORDEN)
 const btnTechos = document.getElementById('btn-techos');
 const btnExpansion = document.getElementById('btn-expansion');
+
+// Función para traer capas al frente
+function traerAlFrente(idsCapas) {
+    idsCapas.forEach(id => {
+        if (map.getLayer(id)) map.moveLayer(id);
+    });
+}
 
 btnTechos.addEventListener('click', () => {
     mostrarTechos = !mostrarTechos;
     btnTechos.classList.toggle('activo', mostrarTechos);
     actualizarMapa();
+    // Si lo prendemos, lo pasamos al frente
+    if (mostrarTechos) {
+        traerAlFrente(capasTechos.map(c => c.id));
+    }
 });
 
 btnExpansion.addEventListener('click', () => {
     mostrarExpansion = !mostrarExpansion;
     btnExpansion.classList.toggle('activo', mostrarExpansion);
     actualizarMapa();
+    // Si lo prendemos, lo pasamos al frente
+    if (mostrarExpansion) {
+        traerAlFrente(capasExpansion.map(c => c.id));
+    }
 });
