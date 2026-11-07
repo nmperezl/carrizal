@@ -1,15 +1,14 @@
 // ============================================================
 // DATOS PARA GRÁFICOS (fijos, del informe)
-// NO se recalculan desde las capas: son la serie total del área
-// de estudio (suma de techos por año) y las tasas por período.
+// Serie total del área de estudio (suma de techos por año)
 // ============================================================
 const serieSuperficie = {
     labels: ['2010', '2015', '2022', '2024'],
-    valores: [106.68, 114.34, 153.63, 171.89]  // ha construidas
+    valores: [106.68, 114.34, 153.63, 171.89]
 };
 const serieTasas = {
     labels: ['2010-2015', '2015-2022', '2022-2024'],
-    valores: [1.53, 5.61, 9.13]  // ha/año
+    valores: [1.53, 5.61, 9.13]
 };
 
 // ============================================================
@@ -40,16 +39,19 @@ const map = new maplibregl.Map({
 });
 
 // ============================================================
-// 2. Definir capas y paleta
+// 2. Paleta y estilos
 // ============================================================
 const añosTexto = ['2010', '2015', '2022', '2024'];
 
-// Paleta desaturada pensada para fondo satelital en gris
-const coloresPorAño = ['#b5544a', '#c98a4b', '#b8a54a', '#4a8f7b'];
+// Techos: colores con más presencia (se leen sobre gris)
+const coloresTechos = ['#c0504d', '#d98b3a', '#c9b03e', '#3f8f7a'];
 
-// Estilos diferenciados A1 / A3 (se distinguen cuando están juntas)
-const estiloA1 = { opacidad: 0.55, borde: '#ffffff', grosor: 1.5 };
-const estiloA3 = { opacidad: 0.40, borde: '#1f2d3d', grosor: 2.5 };
+// Expansión: misma familia pero más apagada (relleno)
+const coloresExpansion = ['#a86b68', '#b98a5e', '#a89a5e', '#5e8a7c'];
+
+// A1 vs A3: A1 relleno más presente + borde blanco; A3 más tenue + borde oscuro
+const estiloA1 = { opacidad: 0.55, borde: '#ffffff', grosor: 1.8 };
+const estiloA3 = { opacidad: 0.35, borde: '#2c3e50', grosor: 2.2 };
 
 const capasTechos = [
     { id: 'techos2010', archivo: 'techos_2010.geojson', año: 0 },
@@ -63,83 +65,97 @@ const capasExpansion = [
     { id: 'expA3', archivo: 'expansion_a3.geojson', estilo: estiloA3 }
 ];
 
-// Estado de visibilidad por capa (toggles independientes)
-const visibilidad = {
-    techos: false,
-    expA1: true,   // prendido por defecto
-    expA3: true    // prendido por defecto
-};
-
+const visibilidad = { techos: false, expA1: true, expA3: true };
 let añoActual = 0;
 
 // ============================================================
 // Utilidades
 // ============================================================
-
-// Extrae el año de un string tipo "A1_2024" o "Expansión_A1_2024"
 function extraerAnio(valor) {
     if (!valor) return null;
     const m = String(valor).match(/(20\d{2})/);
     return m ? parseInt(m[1]) : null;
 }
 
-// Filtro MapLibre: año del feature <= año del slider (acumulado)
 function filtroPorAnio(anioLimite) {
     return ['<=', ['to-number', ['get', '_anio']], anioLimite];
 }
 
-// Expresión de color por año (reutilizable)
-function colorPorAnioExpresion() {
+// Expresión de color usando _anio ya inyectado
+function colorExpresion(paleta) {
     return [
         'match', ['to-number', ['get', '_anio']],
-        2010, coloresPorAño[0],
-        2015, coloresPorAño[1],
-        2022, coloresPorAño[2],
-        2024, coloresPorAño[3],
+        2010, paleta[0],
+        2015, paleta[1],
+        2022, paleta[2],
+        2024, paleta[3],
         '#9aa5b1'
     ];
 }
 
+// Carga un GeoJSON y le inyecta _anio en cada feature
+async function cargarGeoJSONConAnio(url) {
+    const resp = await fetch(url);
+    const data = await resp.json();
+    data.features.forEach(f => {
+        f.properties = f.properties || {};
+        f.properties._anio = extraerAnio(f.properties.layer);
+    });
+    return data;
+}
+
 // ============================================================
-// 3. Carga de capas
+// 3. Carga de capas (async, con _anio inyectado ANTES de addSource)
 // ============================================================
-map.on('load', () => {
+map.on('load', async () => {
 
     // --- Techos (sin popup) ---
-    capasTechos.forEach((capa) => {
-        map.addSource(capa.id, { type: 'geojson', data: capa.archivo });
+    for (const capa of capasTechos) {
+        const data = await cargarGeoJSONConAnio(capa.archivo);
+        map.addSource(capa.id, { type: 'geojson', data });
+
         map.addLayer({
             id: capa.id,
             type: 'fill',
             source: capa.id,
             layout: { visibility: 'none' },
             paint: {
-                'fill-color': coloresPorAño[capa.año],
-                'fill-opacity': 0.75,
-                'fill-outline-color': '#ffffff'
+                'fill-color': coloresTechos[capa.año],
+                'fill-opacity': 0.85
             }
         });
-    });
+
+        // Contorno para destacar techos sobre el gris
+        map.addLayer({
+            id: capa.id + '-outline',
+            type: 'line',
+            source: capa.id,
+            layout: { visibility: 'none' },
+            paint: {
+                'line-color': '#ffffff',
+                'line-width': 1.2,
+                'line-opacity': 0.95
+            }
+        });
+    }
 
     // --- Expansión A1 y A3 (con popup) ---
-    capasExpansion.forEach((capa) => {
+    for (const capa of capasExpansion) {
         const est = capa.estilo;
+        const data = await cargarGeoJSONConAnio(capa.archivo);
+        map.addSource(capa.id, { type: 'geojson', data });
 
-        map.addSource(capa.id, { type: 'geojson', data: capa.archivo });
-
-        // Relleno
         map.addLayer({
             id: capa.id,
             type: 'fill',
             source: capa.id,
             layout: { visibility: 'none' },
             paint: {
-                'fill-color': colorPorAnioExpresion(),
+                'fill-color': colorExpresion(coloresExpansion),
                 'fill-opacity': est.opacidad
             }
         });
 
-        // Borde (line encima del fill)
         map.addLayer({
             id: capa.id + '-outline',
             type: 'line',
@@ -152,11 +168,10 @@ map.on('load', () => {
             }
         });
 
-        // Popup solo para expansión
         map.on('click', capa.id, (e) => {
             const p = e.features[0].properties;
             const getVal = (v) => (v !== undefined && v !== null ? v : 'N/A');
-            const anio = extraerAnio(p.layer) || 'N/A';
+            const anio = p._anio || extraerAnio(p.layer) || 'N/A';
             const html = `
                 <div style="font-size:14px;margin-bottom:5px;">
                     <strong>${getVal(p.layer)}</strong>
@@ -168,18 +183,7 @@ map.on('load', () => {
                 </table>`;
             new maplibregl.Popup().setLngLat(e.lngLat).setHTML(html).addTo(map);
         });
-    });
-
-    // Precalcular _anio en features de expansión (para filtro robusto)
-    capasExpansion.forEach((capa) => {
-        const src = map.getSource(capa.id);
-        if (src && src._data && src._data.features) {
-            src._data.features.forEach(f => {
-                f.properties._anio = extraerAnio(f.properties.layer);
-            });
-            src.setData(src._data);
-        }
-    });
+    }
 
     map.fitBounds([[-68.80, -33.35], [-68.71, -33.29]], { padding: 40 });
 
@@ -208,7 +212,7 @@ añosTexto.forEach((texto, index) => {
 slider.addEventListener('input', () => actualizarMapa());
 
 // ============================================================
-// 5. Función maestra de actualización
+// 5. Función maestra
 // ============================================================
 function actualizarMapa() {
     añoActual = parseInt(slider.value);
@@ -220,38 +224,39 @@ function actualizarMapa() {
 
     const anioLimite = parseInt(añosTexto[añoActual]);
 
-    // --- Techos: acumulado hasta el año, si el botón está prendido ---
+    // Techos: acumulado hasta el año, solo si el botón está prendido
     capasTechos.forEach(capa => {
         const visible = visibilidad.techos && capa.año <= añoActual;
         map.setLayoutProperty(capa.id, 'visibility', visible ? 'visible' : 'none');
+        map.setLayoutProperty(capa.id + '-outline', 'visibility', visible ? 'visible' : 'none');
     });
 
-    // --- Expansión A1 ---
-    const visA1 = visibilidad.expA1;
-    map.setLayoutProperty('expA1', 'visibility', visA1 ? 'visible' : 'none');
-    map.setLayoutProperty('expA1-outline', 'visibility', visA1 ? 'visible' : 'none');
-    if (visA1) {
+    // Expansión A1
+    map.setLayoutProperty('expA1', 'visibility', visibilidad.expA1 ? 'visible' : 'none');
+    map.setLayoutProperty('expA1-outline', 'visibility', visibilidad.expA1 ? 'visible' : 'none');
+    if (visibilidad.expA1) {
         map.setFilter('expA1', filtroPorAnio(anioLimite));
         map.setFilter('expA1-outline', filtroPorAnio(anioLimite));
     }
 
-    // --- Expansión A3 ---
-    const visA3 = visibilidad.expA3;
-    map.setLayoutProperty('expA3', 'visibility', visA3 ? 'visible' : 'none');
-    map.setLayoutProperty('expA3-outline', 'visibility', visA3 ? 'visible' : 'none');
-    if (visA3) {
+    // Expansión A3
+    map.setLayoutProperty('expA3', 'visibility', visibilidad.expA3 ? 'visible' : 'none');
+    map.setLayoutProperty('expA3-outline', 'visibility', visibilidad.expA3 ? 'visible' : 'none');
+    if (visibilidad.expA3) {
         map.setFilter('expA3', filtroPorAnio(anioLimite));
         map.setFilter('expA3-outline', filtroPorAnio(anioLimite));
     }
 
-    // --- Orden de capas: techos arriba, luego expansión ---
-    capasTechos.forEach(c => { if (map.getLayer(c.id)) map.moveLayer(c.id); });
+    // Orden: techos arriba, luego expansión
+    capasTechos.forEach(c => {
+        if (map.getLayer(c.id)) map.moveLayer(c.id);
+        if (map.getLayer(c.id + '-outline')) map.moveLayer(c.id + '-outline');
+    });
     capasExpansion.forEach(c => {
         if (map.getLayer(c.id)) map.moveLayer(c.id);
         if (map.getLayer(c.id + '-outline')) map.moveLayer(c.id + '-outline');
     });
 
-    // Resaltar año actual en el gráfico
     resaltarEnGrafico();
 }
 
@@ -288,12 +293,13 @@ btnGraficos.addEventListener('click', () => {
 });
 
 // ============================================================
-// 7. Gráficos (fijos, serie total del informe)
+// 7. Gráficos (sobrios, profesionales)
 // ============================================================
 let chartSuperficie = null;
 let chartTasas = null;
 
 function inicializarGraficos() {
+    // Línea: azul grisáceo monocromático
     const ctx1 = document.getElementById('chartSuperficie').getContext('2d');
     chartSuperficie = new Chart(ctx1, {
         type: 'line',
@@ -303,24 +309,35 @@ function inicializarGraficos() {
                 label: 'Superficie construida (ha)',
                 data: serieSuperficie.valores,
                 borderColor: '#5b7a99',
-                backgroundColor: 'rgba(91,122,153,0.15)',
+                backgroundColor: 'rgba(91,122,153,0.12)',
                 fill: true,
                 tension: 0.25,
                 pointRadius: 5,
                 pointBackgroundColor: '#5b7a99',
                 pointBorderColor: '#ffffff',
-                pointBorderWidth: 1.5
+                pointBorderWidth: 1.5,
+                borderWidth: 2
             }]
         },
         options: {
             responsive: true,
             plugins: { legend: { display: false } },
             scales: {
-                y: { beginAtZero: false, title: { display: true, text: 'ha', color: '#666' } }
+                y: {
+                    beginAtZero: false,
+                    grid: { color: 'rgba(0,0,0,0.06)' },
+                    title: { display: true, text: 'ha', color: '#8a97a5' },
+                    ticks: { color: '#8a97a5' }
+                },
+                x: {
+                    grid: { display: false },
+                    ticks: { color: '#8a97a5' }
+                }
             }
         }
     });
 
+    // Barras: tonos tierra apagados, sobrios
     const ctx2 = document.getElementById('chartTasas').getContext('2d');
     chartTasas = new Chart(ctx2, {
         type: 'bar',
@@ -329,8 +346,8 @@ function inicializarGraficos() {
             datasets: [{
                 label: 'Tasa (ha/año)',
                 data: serieTasas.valores,
-                backgroundColor: ['#b5544a', '#c98a4b', '#4a8f7b'],
-                borderColor: '#ffffff',
+                backgroundColor: ['#9a8a7a', '#a89a8a', '#7a8a8a'],
+                borderColor: 'rgba(0,0,0,0.08)',
                 borderWidth: 1
             }]
         },
@@ -338,17 +355,25 @@ function inicializarGraficos() {
             responsive: true,
             plugins: { legend: { display: false } },
             scales: {
-                y: { beginAtZero: true, title: { display: true, text: 'ha/año', color: '#666' } }
+                y: {
+                    beginAtZero: true,
+                    grid: { color: 'rgba(0,0,0,0.06)' },
+                    title: { display: true, text: 'ha/año', color: '#8a97a5' },
+                    ticks: { color: '#8a97a5' }
+                },
+                x: {
+                    grid: { display: false },
+                    ticks: { color: '#8a97a5' }
+                }
             }
         }
     });
 }
 
-// Resalta el punto del año actual en el gráfico de línea
 function resaltarEnGrafico() {
     if (!chartSuperficie) return;
     chartSuperficie.data.datasets[0].pointRadius =
-        serieSuperficie.labels.map((_, i) => (i === añoActual ? 9 : 5));
+        serieSuperficie.labels.map((_, i) => (i === añoActual ? 8 : 5));
     chartSuperficie.data.datasets[0].pointBackgroundColor =
         serieSuperficie.labels.map((_, i) => (i === añoActual ? '#2c3e50' : '#5b7a99'));
     chartSuperficie.update();
